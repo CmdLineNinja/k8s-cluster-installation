@@ -1,0 +1,17 @@
+##    Configure the AWS Cloud Provider for your cluster  ##
+
+$ sudo kubeadm init --config=kubeadmConfig.yaml 
+
+$ mkdir -p $HOME/.kube
+$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+$ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+##  Clone the GitHub repo for the AWS CCM and install by applying the manifests  ##
+
+$ git clone https://github.com/kubernetes/cloud-provider-aws.git
+
+$ cd cloud-provider-aws/examples/existing-cluster/base/
+
+$ kubectl create -k .
+
+Create a JoinConfiguration YAML for the worker nodes to join this cluster
