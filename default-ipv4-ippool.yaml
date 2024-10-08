@@ -1,0 +1,43 @@
+apiVersion: crd.projectcalico.org/v1
+
+kind: IPPool
+
+metadata:
+
+  #annotations:
+
+  #  projectcalico.org/metadata: '{"uid":"32383150-ba8f-4035-8f8f-ba9b2f33b395","creationTimestamp":"2024-03-19T12:46:39Z"}'
+
+  #creationTimestamp: "2024-03-19T12:46:39Z"
+
+  generation: 1
+
+  name: default-ipv4-ippool
+
+  resourceVersion: "5495"
+
+  uid: 2516d796-4637-445e-aa61-4b78cc65279c
+
+spec:
+
+  allowedUses:
+
+  - Workload
+
+  - Tunnel
+
+  blockSize: 26
+
+  cidr: 192.168.0.0/16
+
+  # ipipMode: Always
+
+  ipipMode: CrossSubnet
+
+  natOutgoing: true
+
+  nodeSelector: all()
+
+  vxlanMode: Never
+
+##  The IPIP mode is set to 'CrossSubnet' instead of 'Always'. The VXLAN is disabled. NAT-outgoing is enabled/true  ##
