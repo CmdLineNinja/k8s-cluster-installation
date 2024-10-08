@@ -1,0 +1,139 @@
+$ sudo apt-get update 
+
+$ sudo swapoff -a
+
+$ sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+$ sudo modprobe overlay			# Load this kernel module
+
+$ sudo modprobe br_netfilter			# Load this kernel module
+
+##	For permanently enabling the kernel modules load on bootup	##
+
+$ sudo tee /etc/modules-load.d/containerd.conf <<EOF
+overlay
+br_netfilter				
+EOF
+
+##	Add the kernel parameters like IP forwarding. Create a file and load the parameters using sysctl command 		##
+
+$ sudo tee /etc/sysctl.d/kubernetes.conf <<EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF
+
+$ sudo sysctl --system
+
+$ sudo apt-get install curl gnupg2 software-properties-common apt-transport-https ca-certificates -y
+
+$ sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/docker.gpg
+
+$ sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+
+
+$ sudo apt-get update
+
+$ sudo apt-get install -y containerd.io
+$ sudo apt-get install docker-ce -y		##	Optional to install Docker Engine	##
+
+##		Post installation start & enable containerd service. 		##
+
+$ sudo systemctl start containerd
+
+$ sudo systemctl enable containerd
+
+
+##	Sets the default containerd configuration for Kubernetes. Writes O/P to /etc/containerd/config.toml	##
+
+$ containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
+
+
+##		Configure containerd so that it starts using SystemdCgroup 		##
+##		Change the setting for SystemdCgroup from false to true.
+##		Ensure Containerd uses systemd for cgroup management. 			##
+
+$ sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+
+$ sudo systemctl restart containerd
+
+$ sudo rm /etc/containerd/config.toml
+
+$ sudo mkdir /etc/apt/keyrings
+
+$ curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+
+$ echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+##		For RHEL and RedHat based distros, add a YUM repo		##
+
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.31/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.31/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+EOF
+
+$ sudo apt-get update
+
+$ sudo apt-get install kubeadm kubelet kubectl kubernetes-cni -y
+
+##	For RHEL, sudo dnf install -y kubelet kubeadm kubectl –disableexcludes=kubernetes		##
+
+
+$ sudo apt-mark hold kubelet kubeadm kubectl
+
+$ sudo apt-get install kubernetes-split-yaml
+
+$ sudo systemctl restart containerd.service
+
+###		COMMANDS FOR CONTROL PLANE NODES ONLY			###
+
+$ sudo kubeadm init --pod-network-cidr=192.168.0.0/16 (bootstrap the Kubernetes control-plane node) 
+
+$ mkdir -p $HOME/.kube
+
+$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+
+$ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+$ sudo kubeadm token create --print-join-command
+(create a new token on control plane node and print the 'join' command to be run on worker nodes)
+
+$ curl https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml -O
+$ kubectl apply -f calico.yaml
+
+(to download the Calico network plugin that implements CNI)
+
+OR
+====
+$ kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+
+
+$ sudo kubeadm config print init-defaults
+
+$ sudo kubeadm config print join-defaults
+
+
+
+Retrieve the hostname of EC2 by using the AWS metadata server and curl as shown
+
+TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` && curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/hostname
+
+Set the hostname to the O/P of the above command
+
+$ hostnamectl set-hostname <O/P from the above curl command>
+
+
+$ kubeadm join 10.0.10.12:6443 --token qci85g.mpd9enocfnfkwvvt --discovery-token-ca-cert-hash sha256:06e3c2f9da8bf1396287a939c857843e2177d848c80c98ea8fa178f82d3f8557 (Token obtained from Master node)
+
+6443 -> Kubernetes api-server Port 
+10.0.10.12 -> Master node private IP. Can be set to hostname if the hostnames of all machines on the Cluster are changed prior to installation
+
+NOTE:- The Calico CNI plugin config files for each node is in
+       /etc/cni/net.d/
+
