@@ -1,8 +1,10 @@
+##  Create a file for kubeadm that contains the ClusterConfiguration and the InitConfiguration  ##
+
 ---
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 
-kubernetesVersion: v1.29.0 # can use "stable"
+kubernetesVersion: v1.31.0 # can use "stable"
 clusterName: "playground"
 #clusterName: kubernetes
 controlPlaneEndpoint: 10.0.10.29:6443
@@ -26,8 +28,8 @@ scheduler:
 
 networking:
   dnsDomain: "cluster.local"
-  podSubnet: 192.168.0.0/16	# the pod CIDR for the cluster
-  serviceSubnet: 10.96.0.0/12        # Subnet for cluster Services. Usually larger than the Pod CIDR
+  podSubnet: 192.168.0.0/16	          # the pod CIDR for the cluster
+  serviceSubnet: 10.96.0.0/12         # Subnet for cluster Services. Usually larger than the Pod CIDR
 
 #apiVersion: kubeadm.k8s.io/v1beta4
 certificatesDir: "/etc/kubernetes/pki"
@@ -52,7 +54,9 @@ nodeRegistration:
       cloud-provider: external
       #    v: 4
 
-      localAPIEndpoint:
-  advertiseAddress: 10.0.10.29
-  bindPort: 6443
+  localAPIEndpoint:
+    advertiseAddress: 10.0.10.29
+    bindPort: 6443
+
+
 
