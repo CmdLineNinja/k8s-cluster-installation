@@ -1,0 +1,58 @@
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+
+kubernetesVersion: v1.29.0 # can use "stable"
+clusterName: "playground"
+#clusterName: kubernetes
+controlPlaneEndpoint: 10.0.10.29:6443
+
+apiServer:
+  timeoutForControlPlane: 4m0s
+  certSANs:
+    - 10.0.10.29
+    - ip-10-0-10-29.ec2.internal
+  extraArgs:
+    cloud-provider: external
+    authorization-mode: "Node,RBAC"
+
+controllerManager:
+  extraArgs:
+    cloud-provider: external
+
+scheduler:
+  extraArgs:
+    bind-address: 10.0.10.29
+
+networking:
+  dnsDomain: "cluster.local"
+  podSubnet: 192.168.0.0/16	# the pod CIDR for the cluster
+  serviceSubnet: 10.96.0.0/12        # Subnet for cluster Services. Usually larger than the Pod CIDR
+
+#apiVersion: kubeadm.k8s.io/v1beta4
+certificatesDir: "/etc/kubernetes/pki"
+imageRepository: "registry.k8s.io"
+
+etcd:
+  local:
+    dataDir: "/var/lib/etcd"
+    imageRepository: "registry.k8s.io"
+---
+
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+
+nodeRegistration:
+  criSocket: unix:///var/run/containerd/containerd.sock
+  name: ip-10-0-10-29.ec2.internal	 	#hostname of the node, set to private DNS name
+  imagePullPolicy: "IfNotPresent"
+  ignorePreflightErrors:
+    - IsPrivilegedUser
+  kubeletExtraArgs:
+      cloud-provider: external
+      #    v: 4
+
+      localAPIEndpoint:
+  advertiseAddress: 10.0.10.29
+  bindPort: 6443
+
