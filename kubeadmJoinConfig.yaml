@@ -1,0 +1,14 @@
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: JoinConfiguration
+discovery:
+  bootstrapToken:
+    token: 5w966m.v9n6idp89d0diyzm	        #the token from O/P of kubeadm init command on the master
+    #  apiServerEndpoint: "cp-lb.us-west-2.elb.amazonaws.com:6443"
+    apiServerEndpoint: "10.0.10.29:6443"	 # the IP and port of the control plane node
+    caCertHashes:
+      - "sha256:2d9bd1a9832d4cd6b3a61a0bfb095fb17be7f3e645858051c367cd8d22144be2"
+nodeRegistration:
+  name: ip-10-0-10-76.ec2.internal	#hostname of the node, set to private DNS name
+  kubeletExtraArgs:
+     cloud-provider: external
