@@ -1,0 +1,305 @@
+apiVersion: eksctl.io/v2alpha5
+kind: ClusterConfig
+
+accessConfig:
+  authenticationMode: API_AND_CONFIG_MAP    # both aws-auth ConfigMap and access entries API can be used
+  bootstrapClusterCreatorAdminPermissions: true   #
+  accessEntries:
+  - principalARN: arn:aws:iam::855335727921:user/iam-username # access to additional IAM user (other than the one creating the cluster)
+    type: STANDARD
+    kubernetesGroups:     # optional Kubernetes groups
+    - group1              # groups can used to give permissions via Kubernetes RBAC
+    - group2
+
+ #- principalARN: arn:aws:iam::111122223333:role/role-name-1
+ #  accessPolicies: # optional access polices
+ #  - policyARN: arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy
+ #    accessScope:
+ #      type: namespace
+ #      namespaces:
+ #      - default
+ #      - my-namespace
+ #      - dev-*
+
+# - principalARN: arn:aws:iam::111122223333:role/admin-role
+#   accessPolicies: # optional access polices
+#   - policyARN: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+#     accessScope:
+#       type: cluster
+
+metadata:
+  name: demo-cluster
+  region: us-east-1
+  version: "1.31"
+
+#availabilityZones: Since we have specified vpc.subnets, this should not be used. Either of availabilityZones OR vpc.subnets to be specified 
+#- us-east-1c
+#- us-east-1b
+#- us-east-1a
+
+kubernetesNetworkConfig:
+  ipFamily: IPv4
+
+cloudWatch:
+  clusterLogging:
+    enableTypes: []  #  CloudWatch logging will not be enabled for the cluster
+# enable it with 'eksctl utils update-cluster-logging --enable-types={SPECIFY-YOUR-LOG-TYPES-HERE (e.g. all)} --region=us-east-1 --cluster=demo-cluster'
+# The following are the possible values:
+
+#    api: Enables the Kubernetes API server logs.
+#    audit: Enables the Kubernetes audit logs.
+#    authenticator: Enables the authenticator logs.
+#    controllerManager: Enables the Kubernetes controller manager logs.
+#    scheduler: Enables the Kubernetes scheduler logs.
+
+addonsConfig:
+# disableDefaultAddons: false
+  disableDefaultAddons: true
+  autoApplyPodIdentityAssociations: true
+# bear in mind that if either pod identity or IRSA configuration is explicitly set in the config file,
+# or if the addon does not support pod identities, addonsConfig.autoApplyPodIdentityAssociations won't have any effect.
+
+addons:     # EKS add-ons for the cluster. If using a custom CNI like Calico, omit the vpc-cni add-on config below
+- name: coredns
+  version: latest
+  configurationValues: |-
+    replicaCount: 2
+  resolveConflicts: overwrite
+
+- name: vpc-cni
+  version: v1.18.5-eksbuild.1
+# useDefaultPodIdentityAssociations: true
+  podIdentityAssociations:
+  - serviceAccountName: aws-node
+    permissionPolicyARNs: ["arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"]  # AWS managed policy for the vpc-cni plugin
+
+ # NOTE:- eksctl O/P message: "default addons kube-proxy were not specified, will install them as EKS addons"
+
+- name: kube-proxy  # this will install kube-proxy as an EKS addon
+
+iam:
+  withOIDC: true  # OpenID Connect provider for the cluster is enabled.
+  # Automatically creates an IRSA for the amazon CNI plugin, granting the necessary permissions only to the CNI service account
+  serviceRoleARN: arn:aws:iam::855335727921:role/AWS_Managed_EKS_Cluster_role # Has the 'AmazonEKSClusterPolicy' managed policy attached
+  serviceAccounts: # pre-including some common iamserviceaccounts
+  - metadata:
+      name: aws-load-balancer-controller
+      namespace: kube-system
+    wellKnownPolicies:
+      awsLoadBalancerController: true
+  - metadata:
+      name: ebs-csi-controller-sa
+      namespace: kube-system
+    wellKnownPolicies:
+      ebsCSIController: true
+  - metadata:
+      name: efs-csi-controller-sa
+      namespace: kube-system
+    wellKnownPolicies:
+      efsCSIController: true
+  - metadata:
+      name: external-dns
+      namespace: kube-system
+    wellKnownPolicies:
+      externalDNS: true
+  - metadata:
+      name: cert-manager
+      namespace: cert-manager
+    wellKnownPolicies:
+      certManager: true
+  - metadata:
+      name: cluster-autoscaler
+      namespace: kube-system
+    wellKnownPolicies:
+      autoScaler: true
+        #   - metadata:
+        #      name: build-service
+        #      namespace: ci-cd
+        #    wellKnownPolicies:
+        #      imageBuilder: true
+        #  - metadata:
+        #      name: cache-access
+        #      namespace: backend-apps
+        #      labels: {aws-usage: "application"}
+        #    attachPolicyARNs:
+        #    - "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess"
+        #    - "arn:aws:iam::aws:policy/AmazonElastiCacheFullAccess"
+  - metadata:
+      name: autoscaler-service
+      namespace: kube-system
+    attachPolicy: # inline policy can be defined along with `attachPolicyARNs`
+      Version: "2012-10-17"
+      Statement:
+      - Effect: Allow
+        Action:
+        - "autoscaling:DescribeAutoScalingGroups"
+        - "autoscaling:DescribeAutoScalingInstances"
+        - "autoscaling:DescribeLaunchConfigurations"
+        - "autoscaling:DescribeTags"
+        - "autoscaling:SetDesiredCapacity"
+        - "autoscaling:TerminateInstanceInAutoScalingGroup"
+        - "ec2:DescribeLaunchTemplateVersions"
+        Resource: '*'
+privateCluster:
+  enabled: false
+  skipEndpointCreation: false
+
+vpc:
+  id: "vpc-00cac9ea2cb09c8d3"      # (optional, must match VPC ID used for each subnet below)
+  cidr: 40.0.0.0/18                # (optional, must match CIDR used by the given VPC)
+  publicAccessCIDRs: ["0.0.0.0/0"]   # restrict access to the public API endpoint to a set of CIDRs
+  autoAllocateIPv6: false
+  clusterEndpoints:
+    privateAccess: true   # Traffic destined for the API server from within the VPC does not exit the VPC
+    publicAccess:  true   # API server endpoint is exposed publicly
+     
+  subnets:
+    private:
+      us-east-1a: { id: subnet-09bf0b9bec584a153 }
+      us-east-1b: { id: subnet-09decd79d1b04100c }
+     # us-east-1c: { id:  }
+  
+    public:
+      us-east-1a:
+        id: subnet-0c6e295c41b6a21c0
+        cidr: 40.0.0.0/26
+      us-east-1c:
+        id: subnet-0d1a67089440c33d4
+        cidr: 40.0.0.128/26
+      us-east-1d:
+        id: subnet-0267bd971a955139c 
+        cidr: 40.0.48.0/20
+  nat:
+    gateway: HighlyAvailable    # Creates a NAT-GW in each AZ. Other options: Disable, Single (default)
+
+
+nodeGroups:   # This is an unmanaged NodeGroup
+- name: ng-1
+  labels: 
+    role: workers 
+    alpha.eksctl.io/cluster-name: "demo-cluster"
+    alpha.eksctl.io/nodegroup-name: ng-1
+  tags:
+      k8s.io/cluster-autoscaler/enabled: "true" # tag is needed for cluster autoscaler. Refer: https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/cloudprovider/aws/README.md#auto-discovery-setup
+      k8s.io/cluster-autoscaler/demo-cluster: "shared"    # cluster name tag is optional in latest versions of EKS
+      alpha.eksctl.io/nodegroup-name: ng-1
+      alpha.eksctl.io/nodegroup-type: unmanaged
+  instanceType: t3.medium
+  ami: ami-0fff1b9a61dec8a5f  # Custom AMI provided. For Nodes to join the cluster, kubelet must be pre-installed and enabled. 
+  # Ensure eksctl has installed the correct bootstrap script in the User data for each node to register with the cluster
+  amiFamily: AmazonLinux2023  # Ubuntu2204 for Ubuntu 22.04 Jammy
+  desiredCapacity: 5
+  volumeSize: 40
+  volumeIOPS: 3000
+  volumeThroughput: 125
+  volumeType: gp3
+  disableIMDSv1: true
+  disablePodIMDS: false # if 'true', this option prevents all non host networking pods running in this nodegroup from making IMDS requests.
+    
+  privateNetworking: true   # will provision Nodes in Private Subnets only. if only 'Private' subnets are given, this must be enabled
+
+  kubeletExtraConfig:
+    kubeReserved:                # reserves 300m vCPU, 300Mi of memory and 1Gi of ephemeral-storage for the kubelet
+      cpu: "300m"
+      memory: "300Mi"
+      ephemeral-storage: "1Gi"
+    kubeReservedCgroup: "/kube-reserved"
+    systemReserved:             # 300m vCPU, 300Mi of memory and 1Gi of ephemeral storage for OS system daemons
+      cpu: "300m"
+      memory: "300Mi"
+      ephemeral-storage: "1Gi"
+    evictionHard:               # kicks in eviction of pods when there is less than 200Mi of memory available or less than 10% of the root filesystem
+      memory.available:  "200Mi"
+      nodefs.available: "10%"
+    featureGates:
+      RotateKubeletServerCertificate: true # has to be enabled, otherwise it will be disabled
+  
+    # ssh:
+    #  allow: true # will use ~/.ssh/id_rsa.pub as the default ssh key
+  ssh: # use existing EC2 keypair
+    publicKeyName: linux-ec2
+  iam:
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+      - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+    withAddonPolicies:
+      albIngress: false
+      appMesh: false
+      appMeshPreview: false
+      fsx: false
+      xRay: false
+      autoScaler: true
+      imageBuilder: true    # allows for full ECR (Elastic Container Registry) access
+      ebs: true         # enables the new EBS CSI (Elastic Block Store Container Storage Interface) driver
+      efs: true
+      cloudWatch: true
+ # NOTE:  nodeGroups[0].iam.instanceRoleARN and nodeGroups[0].iam.withAddonPolicies cannot be set at the same time
+
+ #   instanceRoleARN: arn:aws:iam::855335727921:role/EKS_WorkerNodeGroup_Role  # Has AmazonEKSWorkerNodePolicy, AmazonEKS_CNI_Policy, AmazonEC2ContainerRegistryReadOnly
+ #   withAddonPolicies:
+ #    autoScaler: true    #   nodeGroups[0].iam.instanceRoleARN and nodeGroups[0].iam.withAddonPolicies.autoScaler cannot be set at the same time
+ #     ebs: true     # enables the new EBS CSI (Elastic Block Store Container Storage Interface) driver
+ #     fsx: true
+ #     efs: true
+ #     awsLoadBalancerController: true
+ #     imageBuilder: true  s
+ #     cloudWatch: true
+
+- name: ng-2
+  labels: { role: builders }
+  instanceType: m5.xlarge
+  desiredCapacity: 2
+  volumeSize: 100
+  privateNetworking: true #if only 'Private' subnets are given, this must be enabled
+
+  kubeletExtraConfig:
+    kubeReserved:                # reserves 300m vCPU, 300Mi of memory and 1Gi of ephemeral-storage for the kubelet
+      cpu: "300m"
+      memory: "300Mi"
+      ephemeral-storage: "1Gi"
+    kubeReservedCgroup: "/kube-reserved"
+    systemReserved:             # 300m vCPU, 300Mi of memory and 1Giof ephemeral storage for OS system daemons
+      cpu: "300m"
+      memory: "300Mi"
+      ephemeral-storage: "1Gi"
+    evictionHard:               # kicks in eviction of pods when there is less than 200Mi of memory available or less than 10% of the root filesystem
+      memory.available:  "200Mi"
+      nodefs.available: "10%"
+    featureGates:
+      RotateKubeletServerCertificate: true # has to be enabled, otherwise it will be disabled
+  ssh:
+      publicKeyPath: ~/.ssh/ec2_id_rsa.pub
+
+managedNodeGroups:
+  - name: managed-ng-1  # EKS managed nodeGroup
+    minSize: 2
+    maxSize: 4
+    desiredCapacity: 3
+    volumeSize: 20
+    ssh:
+      allow: true
+      publicKeyPath: ~/.ssh/ec2_id_rsa.pub
+      # new feature for restricting SSH access to certain AWS security group IDs
+      sourceSecurityGroupIds: ["sg-00241fbb12c607007"]
+    labels: {role: worker}
+    tags:
+      nodegroup-role: worker
+    iam:
+      withAddonPolicies: 
+        albIngress: false
+        appMesh: false
+        appMeshPreview: false
+        cloudWatch: false
+        ebs: false
+        efs: false
+        fsx: false
+        imageBuilder: false
+        xRay: false
+        awsLoadBalancerController: true
+        autoScaler: false
+        externalDNS: true
+        certManager: true
+    privateNetworking: false
+  ##  The nodes in this nodeGroup will be provisioned in Public Subnets
